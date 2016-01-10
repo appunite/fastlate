@@ -1,0 +1,141 @@
+require 'thor'
+require 'highline'
+require 'highline/import'
+require 'grit'
+require 'rubygems'
+require 'yaml'
+
+class FastLate < Thor
+
+  desc "versions", "show all available template versions"
+  def versions
+    puts "Available Versions:"
+  end
+
+  desc "setup", "Setup template with given version."
+  def setup
+  	
+	@version = ask(HighLine.new.color("Please Select Template Version:", HighLine::CYAN))
+
+	say("Setuping with #{@version}...")
+
+	cleanup
+
+	clone
+
+	check_version
+
+	copy_template
+
+	read_variables
+
+	ask_for_variables
+
+	insert_variables
+
+	print_required_variables
+
+	cleanup
+
+  end
+
+  desc "cleanup", "Cleanup templates directory"
+  def cleanup
+  	say(HighLine.new.color('Cleaning Temp Files', HighLine::GRAY))	
+  	`rm -rf fastlane_templates`
+  end
+
+  private
+
+  def clone
+  	say(HighLine.new.color('Cloning template repo...', HighLine::GRAY))	
+
+  	`git clone git@github.com:appunite/fastlane_templates.git`
+
+  	if !File.directory?("fastlane_templates/")
+  	
+      raise_error "Could not reach Fastlane Templates repository. Please make sure that you passed correct url."
+    end
+  end
+
+  def check_version
+  	say(HighLine.new.color('Checking if given version exist...', HighLine::GRAY))	
+
+  	if !File.directory?("fastlane_templates/#{@version}")
+  		raise_error "Could not template with #{@version} version. Please use 'fastlate versions' command to see all available versions."
+  	end
+
+  	say(HighLine.new.color('Version found!', HighLine::GRAY))	
+  end 
+
+  def copy_template
+  	say(HighLine.new.color('Copying Template', HighLine::GRAY))	
+
+  	`cp -a fastlane_templates/#{@version}/. .`
+  end
+
+  def read_variables
+  	say(HighLine.new.color('Reading envs', HighLine::GRAY))
+
+	@variables = YAML.load_file("enviroment.yml")
+	`rm -rf enviroment.yml`
+  end
+
+  def print_required_variables
+  	say('°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°')
+  	say(HighLine.new.color('Dont forget to setup these variables in Gitlab CI:', HighLine::CYAN))
+	say('°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°')
+
+	@variables["fastlate"]["ci_envs"].each do |key, description|
+		say(HighLine.new.color("#{key} - #{description}", HighLine::CYAN))
+	end
+
+	say('°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°')
+  end
+
+  def ask_for_variables
+  	@answers = {}
+
+  	@variables["fastlate"]["envs"].each do |key, description|
+  		say('°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°')
+  		say(HighLine.new.color("Please provide #{key}", HighLine::CYAN))
+		value = ask(HighLine.new.color("#{description} :", HighLine::CYAN))
+
+		@answers[key] = value
+	end
+
+	print_variables
+  end
+
+  def print_variables
+  	say('°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°')
+  	say(HighLine.new.color("Provided variables: ", HighLine::CYAN))
+
+  	@answers.each do |key, value|
+  		say(HighLine.new.color("#{key} - #{value}", HighLine::CYAN))
+  	end
+  	say('°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°')
+  end
+
+  def raise_error error_message
+  	say('°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°')
+  	say(HighLine.new.color(error_message, HighLine::RED))
+	say('°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°')
+
+	raise error_message
+  end
+
+  def insert_variables
+  	say(HighLine.new.color('Writing envs', HighLine::GRAY))
+  	
+  	File.open("fastlane/.env", "a") do |f| 
+  		@answers.each do |key, value|
+  			f.puts "#{key}=\"#{value}\""
+  		end
+  	end
+
+  end
+
+end
+
+FastLate.start(ARGV)
